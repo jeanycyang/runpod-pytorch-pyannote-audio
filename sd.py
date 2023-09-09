@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+from pathlib import Path
 from collections import defaultdict
 import torch
 import librosa
@@ -18,7 +19,7 @@ def main():
     logger = logging.getLogger('speaker_diarization')
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    logger.info("device: ", device)
+    logger.info(f"device: {device}")
 
     hf_token = os.environ.get('HUGGINGFACE_TOKEN')
     if not hf_token:
@@ -31,6 +32,8 @@ def main():
     if not input_path or not output_dir:
         raise ValueError("input_path and output_dir must be given.")
 
+    output_dir = Path(output_dir)
+
     try:
         audio, sr = librosa.load(input_path, sr=sr, mono=True)
     except Exception as e:
@@ -41,6 +44,7 @@ def main():
                                         use_auth_token=hf_token)
     if pipeline is None:
         raise ValueError("Failed to load pipeline")
+    pipeline = pipeline.to(torch.device(device))
 
     logger.info(f"Processing {input_path}. This may take a while...")
     diarization = pipeline(
@@ -49,6 +53,11 @@ def main():
 
     logger.info(f"Found {len(diarization)} tracks, writing to {output_dir}")
     speaker_count = defaultdict(int)
+
+    print(diarization)
+
+    for turn, _, speaker in diarization.itertracks(yield_label=True):
+        print(f"start={turn.start:.1f}s stop={turn.end:.1f}s speaker_{speaker}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     for segment, track, speaker in tqdm(
